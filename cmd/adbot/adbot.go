@@ -5,13 +5,11 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"os"
-	"strconv"
-	"strings"
+	"sort"
+	"time"
 
 	alarmdecoder "github.com/d4l3k/go-alarmdecoder"
 	"github.com/foomo/simplecert"
-	"github.com/gorilla/handlers"
 	"github.com/jacobsa/go-serial/serial"
 	messenger "github.com/mileusna/facebook-messenger"
 	"github.com/pkg/errors"
@@ -19,18 +17,18 @@ import (
 )
 
 var (
-	bind        = flag.String("bind", ":443", "address for webserver to listen on")
-	email       = flag.String("email", "rice@fn.lc", "email address associated with cert")
-	domain      = flag.String("domain", "ariel.fn.lc", "domain to get a SSL cert for")
-	port        = flag.String("port", "/dev/ttyAMA0", "serial port")
-	baudRate    = flag.Uint("baud", 115200, "baud rate of the serial port")
-	accessToken = flag.String("accesstoken", "", "access token")
-	verifyToken = flag.String("verifytoken", "", "verify token")
-	pageID      = flag.String("pageid", "", "page ID")
-	usersCSV    = flag.String("users", "", "users to send notifications to")
+	bind      = flag.String("bind", ":443", "address for webserver to listen on")
+	email     = flag.String("email", "rice@fn.lc", "email address associated with cert")
+	domain    = flag.String("domain", "ariel.fn.lc", "domain to get a SSL cert for")
+	port      = flag.String("port", "/dev/ttyAMA0", "serial port")
+	baudRate  = flag.Uint("baud", 115200, "baud rate of the serial port")
+	secretKey = flag.String("secret", "", "shared secret with clients")
 )
 
-const readyMessage = "****DISARMED****  READY TO ARM"
+const (
+	readyMessage = "****DISARMED****  READY TO ARM"
+	maxAge       = 7 * 24 * time.Hour
+)
 
 func main() {
 	flag.Parse()
@@ -40,9 +38,13 @@ func main() {
 	}
 }
 
+type Event struct {
+	Time time.Time
+	Body string
+}
+
 type ADBot struct {
-	msng  *messenger.Messenger
-	users []int64
+	recentEvents []Event
 }
 
 func run() error {
@@ -50,16 +52,16 @@ func run() error {
 	return b.Run()
 }
 
+func dropOldEvents(events []Event, before time.Time) []Event {
+	keepIdx := sort.Search(len(events), func(i int) bool {
+		return events[i].Time.After(before)
+	})
+	return events[keepIdx:]
+}
+
 func (b *ADBot) broadcast(s string, push bool) error {
-	for _, user := range b.users {
-		msg := b.msng.NewTextMessage(user, s)
-		if !push {
-			msg.NotificationType = messenger.NotificationTypeNoPush
-		}
-		if _, err := b.msng.SendMessage(msg); err != nil {
-			return err
-		}
-	}
+	b.recentEvents = dropOldEvents(b.recentEvents, time.Now().Add(-maxAge))
+	b.recentEvents = append(b.recentEvents, Event{Time: time.Now(), Body: s})
 	return nil
 }
 
@@ -77,38 +79,14 @@ func (b *ADBot) Run() error {
 	}
 	defer port.Close()
 
-	if len(*accessToken) == 0 {
-		return errors.Errorf("must specify an access token")
+	if len(*secretKey) == 0 {
+		return errors.Errorf("must specify an secret key")
 	}
-	if len(*verifyToken) == 0 {
-		return errors.Errorf("must specify an verify token")
-	}
-	if len(*pageID) == 0 {
-		return errors.Errorf("must specify a page id")
-	}
-	if len(*usersCSV) == 0 {
-		return errors.Errorf("must specify a user")
-	}
-	for _, user := range strings.Split(*usersCSV, ",") {
-		id, err := strconv.ParseInt(user, 10, 64)
-		if err != nil {
-			return err
-		}
-		b.users = append(b.users, id)
-	}
-
-	b.msng = &messenger.Messenger{
-		AccessToken: *accessToken,
-		VerifyToken: *verifyToken,
-		PageID:      *pageID,
-	}
-	b.msng.MessageReceived = b.messageReceived
 
 	log.Printf("Listening...")
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/callback", handlers.LoggingHandler(os.Stdout, b.msng))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eg, ctx := errgroup.WithContext(ctx)
