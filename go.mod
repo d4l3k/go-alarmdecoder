@@ -10,6 +10,7 @@ require (
 	github.com/gorilla/handlers v1.4.2
 	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
 	github.com/mileusna/facebook-messenger v0.0.0-20170622184612-613a2157fa62
+	github.com/oliveroneill/exponent-server-sdk-golang v0.0.0-20190619221248-65582a10ed02
 	github.com/pkg/errors v0.8.1
 	go.opencensus.io v0.22.2 // indirect
 	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -14,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	fcm "github.com/appleboy/go-fcm"
 	alarmdecoder "github.com/d4l3k/go-alarmdecoder"
 	"github.com/foomo/simplecert"
 	"github.com/gorilla/handlers"
 	"github.com/jacobsa/go-serial/serial"
+	expo "github.com/oliveroneill/exponent-server-sdk-golang/sdk"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -28,7 +29,6 @@ var (
 	mock      = flag.Bool("mock", false, "whether to mock out the alarm decoder device")
 	email     = flag.String("email", "rice@fn.lc", "email address associated with cert")
 	domain    = flag.String("domain", "ariel.fn.lc", "domain to get a SSL cert for")
-	fcmKey    = flag.String("fcm", "", "api key for Firebase cloud messaging")
 	port      = flag.String("port", "/dev/ttyAMA0", "serial port")
 	baudRate  = flag.Uint("baud", 115200, "baud rate of the serial port")
 	secretKey = flag.String("secret", "", "shared secret with clients")
@@ -53,20 +53,24 @@ type Event struct {
 }
 
 type ADBot struct {
-	fcm *fcm.Client
-	mu  struct {
+	push *expo.PushClient
+
+	mu struct {
 		sync.Mutex
 
 		// map from device ID to token
-		registrationTokens map[string]string
+		registrationTokens map[string]expo.ExponentPushToken
 		recentEvents       []Event
+		nextListenerID     int64
+		listeners          map[int64]chan<- Event
 	}
 }
 
 func run() error {
 	log.SetFlags(log.Lshortfile | log.Flags())
 	var b ADBot
-	b.mu.registrationTokens = map[string]string{}
+	b.mu.registrationTokens = map[string]expo.ExponentPushToken{}
+	b.mu.listeners = map[int64]chan<- Event{}
 	return b.Run()
 }
 
@@ -77,35 +81,67 @@ func dropOldEvents(events []Event, before time.Time) []Event {
 	return events[keepIdx:]
 }
 
-func (b *ADBot) tokens() []string {
+func (b *ADBot) tokens() []expo.ExponentPushToken {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	var tokens []string
+	var tokens []expo.ExponentPushToken
 	for _, token := range b.mu.registrationTokens {
 		tokens = append(tokens, token)
 	}
 	return tokens
 }
 
-func (b *ADBot) broadcast(ctx context.Context, e Event, push bool) error {
+func isHighPriority(e Event) bool {
+	return e.AlarmSounding || e.Fire
+}
+
+func shouldPush(e Event) bool {
+	return e.Beeps > 0 || isHighPriority(e)
+}
+
+func (b *ADBot) sendPushNotifications(ctx context.Context, e Event) error {
+	if !shouldPush(e) {
+		return nil
+	}
+
+	priority := expo.DefaultPriority
+	ttlSeconds := 60 // 1 minute
+	channelID := "event"
+	if isHighPriority(e) {
+		ttlSeconds = 24 * 60 * 60 // 1 day
+		priority = expo.HighPriority
+		channelID = "alarm"
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
 
+	var messages []expo.PushMessage
 	for _, token := range b.tokens() {
 		log.Printf("sending to %s", token)
-		_, err := b.fcm.SendWithContext(ctx, &fcm.Message{
-			To: token,
-			Notification: &fcm.Notification{
-				Title: "Alarm Bot",
-				Body:  e.KeypadMessage,
-			},
-			Data: map[string]interface{}{
-				"event": e,
-			},
+		messages = append(messages, expo.PushMessage{
+			To:         token,
+			Title:      e.KeypadMessage,
+			Body:       e.KeypadMessage,
+			Priority:   priority,
+			TTLSeconds: ttlSeconds,
+			Sound:      "default",
+			ChannelID:  channelID,
 		})
-		if err != nil {
-			return err
+	}
+
+	resps, err := b.push.PublishMultiple(messages)
+	if err != nil {
+		return err
+	}
+	for _, resp := range resps {
+		if err := resp.ValidateResponse(); err != nil {
+			if err, ok := err.(*expo.DeviceNotRegisteredError); ok {
+				b.removeToken(resp.PushMessage.To)
+			} else {
+				return err
+			}
 		}
 	}
 	return nil
@@ -153,17 +189,77 @@ func (b *ADBot) registerHandler(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.mu.registrationTokens[req.InstallationID] = req.Token
+	token, err := expo.NewExponentPushToken(req.Token)
+	if err != nil {
+		return nil, err
+	}
+
+	b.addToken(token, req.InstallationID)
 
 	return nil, nil
 }
 
-func (b *ADBot) alarmHandler(r *http.Request) (interface{}, error) {
+func (b *ADBot) addToken(token expo.ExponentPushToken, installID string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.mu.recentEvents, nil
+
+	b.mu.registrationTokens[installID] = token
+}
+
+func (b *ADBot) removeToken(token expo.ExponentPushToken) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for id, target := range b.mu.registrationTokens {
+		if token == target {
+			delete(b.mu.registrationTokens, id)
+			break
+		}
+	}
+}
+
+func writeEventNDJSON(w io.Writer, e Event) error {
+	if err := json.NewEncoder(w).Encode(e); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *ADBot) alarmHandler(w http.ResponseWriter, r *http.Request) {
+	c := make(chan Event, 10)
+	b.mu.Lock()
+	events := b.mu.recentEvents
+	id := b.mu.nextListenerID
+	b.mu.nextListenerID++
+	b.mu.listeners[id] = c
+	b.mu.Unlock()
+
+	defer func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+
+		delete(b.mu.listeners, id)
+	}()
+
+	for _, event := range events {
+		if err := writeEventNDJSON(w, event); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+	}
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	for event := range c {
+		if err := writeEventNDJSON(w, event); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
 }
 
 func (b *ADBot) thermostatHandler(r *http.Request) (interface{}, error) {
@@ -174,15 +270,11 @@ func (b *ADBot) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var err error
-	b.fcm, err = fcm.NewClient(*fcmKey)
-	if err != nil {
-		return err
-	}
+	b.push = expo.NewPushClient(nil)
 
 	mux := http.NewServeMux()
 	mux.Handle("/register", jsonHandler(b.registerHandler))
-	mux.Handle("/alarm", jsonHandler(b.alarmHandler))
+	mux.Handle("/alarm", http.HandlerFunc(b.alarmHandler))
 	mux.Handle("/thermostat", jsonHandler(b.thermostatHandler))
 
 	handler := enforceAuth(mux, *secretKey)
@@ -231,25 +323,24 @@ func (b *ADBot) Run() error {
 			}
 			log.Printf("%+v", msg)
 
+			e := Event{
+				Time:    time.Now(),
+				Message: msg,
+			}
+
 			if msg.KeypadMessage == lastMsg {
 				continue
 			}
 			lastMsg = msg.KeypadMessage
 
-			push := msg.Beeps > 0 || msg.AlarmSounding
-
-			if !push && msg.KeypadMessage == readyMessage {
+			if !shouldPush(e) && msg.KeypadMessage == readyMessage {
 				continue
 			}
 
-			e := Event{
-				Time:    time.Now(),
-				Message: msg,
-			}
 			b.addEvent(e)
 
-			if err := b.broadcast(ctx, e, push); err != nil {
-				log.Printf("broadcast error %+v", err)
+			if err := b.sendPushNotifications(ctx, e); err != nil {
+				log.Printf("sendPushNotifications error %+v", err)
 			}
 		}
 		return nil
@@ -264,6 +355,13 @@ func (b *ADBot) addEvent(e Event) {
 
 	b.mu.recentEvents = dropOldEvents(b.mu.recentEvents, time.Now().Add(-maxAge))
 	b.mu.recentEvents = append(b.mu.recentEvents, e)
+
+	for _, listener := range b.mu.listeners {
+		select {
+		case listener <- e:
+		default:
+		}
+	}
 }
 
 type mockAlarmDecoder struct{}
@@ -272,7 +370,7 @@ func (mockAlarmDecoder) Read() (alarmdecoder.Message, error) {
 	time.Sleep(5 * time.Second)
 	return alarmdecoder.Message{
 		KeypadMessage: "foo " + strconv.Itoa(rand.Intn(100)),
-		AlarmSounding: rand.Float64() < 0.1,
+		//AlarmSounding: rand.Float64() < 0.1,
 	}, nil
 }
 

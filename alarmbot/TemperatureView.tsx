@@ -31,7 +31,7 @@ const TempGroup = (props: {label: string}): React.ReactNode => {
   );
 }
 
-export const TemperatureView = (): React.ReactNode => {
+export const TemperatureView: React.FC<{}> = () => {
   return (
     <View style={styles.container}>
       <View style={styles.section}>

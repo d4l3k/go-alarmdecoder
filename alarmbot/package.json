@@ -8,8 +8,15 @@
     "eject": "expo eject"
   },
   "dependencies": {
+    "@expo/browser-polyfill": "^0.1.0",
+    "@types/lodash.debounce": "^4.0.6",
+    "can-ndjson-stream": "^1.0.2",
     "expo": "~36.0.0",
     "expo-constants": "~8.0.0",
+    "fetch-readablestream": "^0.2.0",
+    "fetch-stream": "^0.6.5",
+    "lodash.debounce": "^4.0.8",
+    "moment": "^2.24.0",
     "prop-types": "^15.7.2",
     "react": "~16.9.0",
     "react-dom": "~16.9.0",
@@ -17,12 +24,14 @@
     "react-native-chart-kit": "^4.2.0",
     "react-native-elements": "^1.2.7",
     "react-native-gesture-handler": "~1.5.0",
+    "react-native-nprogress": "^1.1.0",
     "react-native-numeric-input": "^1.8.3",
     "react-native-reanimated": "~1.4.0",
     "react-native-screens": "2.0.0-alpha.12",
     "react-native-svg": "9.13.3",
     "react-native-tab-view": "^2.11.0",
-    "react-native-web": "~0.11.7"
+    "react-native-web": "~0.11.7",
+    "web-streams-polyfill": "^2.0.6"
   },
   "devDependencies": {
     "@babel/core": "^7.0.0",

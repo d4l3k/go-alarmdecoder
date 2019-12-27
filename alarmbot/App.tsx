@@ -4,7 +4,10 @@ import { registerForPushNotificationsAsync } from './notifications';
 import { TabView, SceneMap, Route } from 'react-native-tab-view';
 import {TemperatureView} from './TemperatureView';
 import {AlarmView} from './AlarmView';
-import {HOMES} from './networking';
+import {NetworkStatus, HOMES, Home} from './networking';
+
+import { ReadableStream } from "web-streams-polyfill/ponyfill";
+global.ReadableStream = global.ReadableStream || ReadableStream;
 
 const initialLayout = { width: Dimensions.get('window').width };
 
@@ -18,41 +21,50 @@ const _renderLazyPlaceholder = ({ route }: {route: Route}) => <LazyPlaceholder r
 
 function Router() {
   const [index, setIndex] = React.useState(0);
-  const sceneMap: {
-    [key: string]: React.ComponentType<any>;
-  } = {};
-  const routesConfig: Route[] = [];
+
+  interface OurRoute extends Route {
+    home: Home;
+    thermostat: boolean;
+  }
+  const routesConfig: OurRoute[] = [];
   for (const home of HOMES) {
     if (home.alarm) {
       const title = `${home.name}\nAlarm`;
       routesConfig.push({
         key: title,
         title: title,
+        thermostat: false,
+        home,
       });
-      sceneMap[title] = AlarmView;
     }
     if (home.thermostat) {
       const title = `${home.name}\nThermostat`;
       routesConfig.push({
         key: title,
         title: title,
+        thermostat: true,
+        home,
       });
-      sceneMap[title] = TemperatureView;
     }
   }
 
   const [routes] = React.useState(routesConfig);
-  const renderScene = SceneMap(sceneMap);
+  const renderScene = ({route}: {route: OurRoute}): React.ReactNode => {
+    if (route.thermostat) {
+      return <TemperatureView />;
+    } else {
+      return <AlarmView home={route.home} />
+    }
+  }
 
   return (
-    <TabView
+    <TabView<OurRoute>
       lazy
       navigationState={{ index, routes }}
       renderLazyPlaceholder={_renderLazyPlaceholder}
       renderScene={renderScene}
       onIndexChange={setIndex}
       initialLayout={initialLayout}
-      style={styles.router}
     />
   );
 }
@@ -63,22 +75,21 @@ export default class App extends React.Component<{}, {}> {
   }
 
   render() {
-
     return (
-      <Router />
+      <View style={styles.container}>
+        <NetworkStatus />
+        <Router />
+      </View>
     );
   }
 }
 
 const styles = StyleSheet.create({
-  router: {
-    marginTop: StatusBar.currentHeight,
-  },
-
   container: {
+    marginTop: StatusBar.currentHeight,
     flex: 1,
     backgroundColor: '#fff',
-    alignItems: 'center',
+    alignItems: 'stretch',
     justifyContent: 'center',
   },
 });

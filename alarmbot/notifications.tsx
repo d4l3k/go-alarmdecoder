@@ -6,6 +6,20 @@ import {HOMES, post} from './networking';
 const PUSH_ENDPOINT = '/register';
 
 export async function registerForPushNotificationsAsync(): Promise<void> {
+  Notifications.createChannelAndroidAsync('event', {
+    name: 'Event',
+    priority: 'high',
+    description: 'General alarm events such as openning a door or turning the alarm off.',
+    sound: true,
+  });
+  Notifications.createChannelAndroidAsync('alarm', {
+    name: 'Alarming',
+    description: 'Notifications when the alarm is sounding or a fire is detected.',
+    priority: 'max',
+    sound: true,
+    vibrate: [0, 250, 250, 250],
+  });
+
   const { status: existingStatus } = await Permissions.getAsync(
     Permissions.NOTIFICATIONS
   );

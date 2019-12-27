@@ -2,7 +2,9 @@ import React from 'react';
 import { StyleSheet, Text, View, Dimensions, StatusBar, ScrollView } from 'react-native';
 import { Notifications } from 'expo';
 import { EventSubscription } from 'fbemitter';
-import {HOMES, get} from './networking';
+import {HOMES, Home, stream} from './networking';
+import debounce from 'lodash.debounce';
+import moment from 'moment';
 
 interface Event {
   ACPower: boolean;
@@ -29,14 +31,18 @@ interface Event {
   ZoneBypassed: boolean;
 }
 
+interface AlarmViewProps {
+  home: Home;
+}
+
 interface AlarmViewState {
   events: Event[];
 }
 
-export class AlarmView extends React.Component<{}, AlarmViewState> {
+export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
   private listener: EventSubscription;
 
-  constructor(props: any) {
+  constructor(props: AlarmViewProps) {
     super(props);
 
     this.state = {events: []};
@@ -54,9 +60,24 @@ export class AlarmView extends React.Component<{}, AlarmViewState> {
     this.listener.remove();
   }
 
-  async updateEvents(): Promise<void> {
-    const events = await get<Event[]>("http://192.168.1.73:8080/alarm");
-    this.setState({events});
+  private async updateEvents(): Promise<void> {
+    const es = await stream<Event>(this.props.home.endpoint + "/alarm");
+    let pending: Event[] = [];
+    const update = debounce(() => {
+      this.setState(({events}) => {
+        events = pending.concat(events);
+        pending = [];
+        return {events};
+      });
+    }, 100);
+    while (true) {
+      const result = await es.read();
+      if (result.done) {
+        return;
+      }
+      pending.unshift(result.value);
+      update();
+    }
   }
 
   render(): React.ReactNode {
@@ -72,9 +93,14 @@ export class AlarmView extends React.Component<{}, AlarmViewState> {
   }
 
   renderEvent(e: Event): React.ReactNode {
+    let time = moment(e.Time);
+    const now = moment();
+    if (time.isAfter(now)) {
+      time = now;
+    }
     return (
       <View key={e.Time} style={styles.event}>
-        <Text>{e.Time}</Text>
+        <Text>{time.fromNow()}</Text>
         <Text>{e.KeypadMessage}</Text>
       </View>
     )
