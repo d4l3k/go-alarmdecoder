@@ -1,36 +1,54 @@
 import React from 'react';
 import { StyleSheet, Text, View, Dimensions, StatusBar } from 'react-native';
 import { registerForPushNotificationsAsync } from './notifications';
-import { TabView, SceneMap } from 'react-native-tab-view';
-import {TemperatureView} from './TemperatureView'
-
-const AlarmView = () => {
-  return (
-    <View style={styles.container}>
-      <Text>Alarm data will appear here!</Text>
-    </View>
-  );
-}
+import { TabView, SceneMap, Route } from 'react-native-tab-view';
+import {TemperatureView} from './TemperatureView';
+import {AlarmView} from './AlarmView';
+import {HOMES} from './networking';
 
 const initialLayout = { width: Dimensions.get('window').width };
 
+const LazyPlaceholder = ({route}: {route: Route}) => (
+  <View style={styles.container}>
+    <Text>Loading {route.title}…</Text>
+  </View>
+);
+
+const _renderLazyPlaceholder = ({ route }: {route: Route}) => <LazyPlaceholder route={route} />;
+
 function Router() {
   const [index, setIndex] = React.useState(0);
-  const [routes] = React.useState([
-    { key: 'seattlealarm', title: 'Seattle\nAlarm' },
-    { key: 'chaletalarm', title: 'Chalet\nAlarm' },
-    { key: 'temperature', title: 'Chalet\nThermostat' },
-  ]);
+  const sceneMap: {
+    [key: string]: React.ComponentType<any>;
+  } = {};
+  const routesConfig: Route[] = [];
+  for (const home of HOMES) {
+    if (home.alarm) {
+      const title = `${home.name}\nAlarm`;
+      routesConfig.push({
+        key: title,
+        title: title,
+      });
+      sceneMap[title] = AlarmView;
+    }
+    if (home.thermostat) {
+      const title = `${home.name}\nThermostat`;
+      routesConfig.push({
+        key: title,
+        title: title,
+      });
+      sceneMap[title] = TemperatureView;
+    }
+  }
 
-  const renderScene = SceneMap({
-    seattlealarm: AlarmView,
-    chaletalarm: AlarmView,
-    temperature: TemperatureView,
-  });
+  const [routes] = React.useState(routesConfig);
+  const renderScene = SceneMap(sceneMap);
 
   return (
     <TabView
+      lazy
       navigationState={{ index, routes }}
+      renderLazyPlaceholder={_renderLazyPlaceholder}
       renderScene={renderScene}
       onIndexChange={setIndex}
       initialLayout={initialLayout}

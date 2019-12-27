@@ -1,10 +1,9 @@
 import {Notifications} from 'expo';
 import * as Permissions from 'expo-permissions';
 import Constants from 'expo-constants';
+import {HOMES, post} from './networking';
 
-const PUSH_ENDPOINTS = [
-  'https://your-server.com/users/push-token',
-];
+const PUSH_ENDPOINT = '/register';
 
 export async function registerForPushNotificationsAsync(): Promise<void> {
   const { status: existingStatus } = await Permissions.getAsync(
@@ -23,19 +22,13 @@ export async function registerForPushNotificationsAsync(): Promise<void> {
 
   let token = await Notifications.getExpoPushTokenAsync();
 
-  for (const endpoint of PUSH_ENDPOINTS) {
-    fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        token: token,
-        installationId: Constants.installationId,
-        deviceName: Constants.deviceId,
-        nativeAppVersion: Constants.nativeAppVersion,
-      }),
+  for (const home of HOMES) {
+    const endpoint = home.endpoint + PUSH_ENDPOINT;
+    post(endpoint, {
+      Token: token,
+      InstallationID: Constants.installationId,
+      DeviceName: Constants.deviceId,
+      NativeAppVersion: Constants.nativeAppVersion,
     });
   }
 }
