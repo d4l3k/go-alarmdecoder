@@ -12,7 +12,12 @@ interface Home {
   thermostat: boolean;
 };
 
-export async function retry<T>(f: () => Promise<T>, tries: number = 3): Promise<T> {
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function retry<T>(f: () => Promise<T>, tries: number = 10): Promise<T> {
+  let sleepMs = 1000;
   for (let i=0;i<tries;i++) {
     try {
       return await f();
@@ -22,6 +27,8 @@ export async function retry<T>(f: () => Promise<T>, tries: number = 3): Promise<
         throw err;
       }
     }
+    await sleep(sleepMs);
+    sleepMs *= 2;
   }
 }
 
@@ -91,9 +98,16 @@ export class NetworkStatus extends React.Component<NetworkStatusProps, NetworkSt
   }
 }
 
-function fetchWrapper(endpoint: string, req: RequestInit): Promise<Response> {
+function fetchWrapperStream(endpoint: string, req: RequestInit): Promise<Response> {
   req.headers = new Headers(req.headers);
   const p = fetchStream(endpoint, req);
+  NetworkStatus.track(p);
+  return p;
+}
+
+function fetchWrapper(endpoint: string, req: RequestInit): Promise<Response> {
+  req.headers = new Headers(req.headers);
+  const p = fetch(endpoint, req);
   NetworkStatus.track(p);
   return p;
 }
@@ -123,7 +137,7 @@ export async function get<K>(endpoint: string): Promise<K> {
 }
 
 export async function stream<K>(endpoint: string): Promise<ReadableStreamDefaultReader<K>> {
-  const resp = await fetchWrapper(endpoint, {
+  const resp = await fetchWrapperStream(endpoint, {
     method: 'GET',
     headers: {
       ...Authorization,

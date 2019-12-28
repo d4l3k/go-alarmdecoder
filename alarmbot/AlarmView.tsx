@@ -50,7 +50,7 @@ export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
 
   componentDidMount(): void {
     retry(async () => {
-      this.updateEvents();
+      await this.updateEvents();
     });
   }
 
@@ -115,6 +115,8 @@ export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
         e.Fire ? styles.fire : null,
         e.AlarmSounding ? styles.alarm : null,
       ]}>
+        {e.Fire ? 'FIRE ALARM - ' : null}
+        {e.AlarmSounding ? 'ALARM - ' : null}
         {e.KeypadMessage}
       </Text>
     )
@@ -140,16 +142,15 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   event: {
-    marginTop: 5,
-    marginBottom: 5,
+    marginTop: 2,
+    marginBottom: 2,
     padding: 10,
     backgroundColor: "#eee",
     borderRadius: 16,
   },
   time: {
     textAlign: 'center',
-    marginRight: 10,
-    marginLeft: 10,
+    margin: 10,
     color: '#aaa',
   }
 })
