@@ -447,8 +447,8 @@ func (mockAlarmDecoder) Read() (alarmdecoder.Message, error) {
 	time.Sleep(5 * time.Second)
 	return alarmdecoder.Message{
 		KeypadMessage: "foo " + strconv.Itoa(rand.Intn(100)),
-		AlarmSounding: rand.Float64() < 0.1,
-		Fire:          rand.Float64() < 0.1,
+		//AlarmSounding: rand.Float64() < 0.1,
+		//Fire:          rand.Float64() < 0.1,
 	}, nil
 }
 

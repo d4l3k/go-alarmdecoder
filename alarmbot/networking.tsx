@@ -12,26 +12,6 @@ interface Home {
   thermostat: boolean;
 };
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-export async function retry<T>(f: () => Promise<T>, tries: number = 10): Promise<T> {
-  let sleepMs = 1000;
-  for (let i=0;i<tries;i++) {
-    try {
-      return await f();
-    } catch (err) {
-      console.warn("try failed", i, f, err);
-      if (i === (tries-1)) {
-        throw err;
-      }
-    }
-    await sleep(sleepMs);
-    sleepMs *= 2;
-  }
-}
-
 export const HOMES: Home[] = [
   {
     name: 'Seattle',
@@ -52,43 +32,116 @@ const Authorization = {
   'Authorization': 'Bearer '+TOKEN,
 };
 
+export function homeFromURL(endpoint: string): Home {
+  for (const home of HOMES) {
+    if (endpoint.startsWith(home.endpoint)) {
+      return home
+    }
+  }
+  return null;
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function retry<T>(f: () => Promise<T>, tries: number = 10): Promise<T> {
+  let sleepMs = 1000;
+  for (let i=0;i<tries;i++) {
+    try {
+      return await f();
+    } catch (err) {
+      console.warn("try failed", i, f, err);
+      if (i === (tries-1)) {
+        throw err;
+      }
+    }
+    await sleep(sleepMs);
+    sleepMs *= 2;
+  }
+}
+
+
 interface NetworkStatusState {
   inflight: number;
+  connections: {[name: string]: ConnectionState};
+}
+
+enum ConnectionState {
+  CONNECTING,
+  SUCCEEDED,
+  FAILED,
 }
 
 interface NetworkStatusProps {}
 
 export class NetworkStatus extends React.Component<NetworkStatusProps, NetworkStatusState> {
   static active: NetworkStatus = null;
-  public static track(p: Promise<Response>) {
-    NetworkStatus.active.addInflight(1);
-    p.finally(() => {
-      NetworkStatus.active.addInflight(-1);
-    });
+  public static track(endpoint: string, p: Promise<Response>) {
+    NetworkStatus.active.track(endpoint, p);
   }
 
   constructor(props: NetworkStatusProps) {
     super(props);
-    this.state = {inflight: 0};
+    this.state = {
+      inflight: 0,
+      connections: {},
+    };
     NetworkStatus.active = this;
   }
 
-  addInflight(offset: number) {
+  private track(endpoint: string, p: Promise<Response>) {
+    this.addInflight(1);
+    this.setConnState(endpoint, ConnectionState.CONNECTING);
+    p.then(() => {
+      this.setConnState(endpoint, ConnectionState.SUCCEEDED);
+    }).catch((err) => {
+      console.warn('request failed', endpoint, err);
+      this.setConnState(endpoint, ConnectionState.FAILED);
+    }).finally(() => {
+      this.addInflight(-1);
+    });
+  }
+
+  private addInflight(offset: number): void {
     console.log('inflight changed', offset, this.state);
     this.setState(({inflight}) => {
       return {inflight: inflight+offset}
     });
   }
 
-  render(): React.ReactNode {
+  private setConnState(endpoint: string, state: ConnectionState): void {
+    this.setState(({connections}) => {
+      connections[homeFromURL(endpoint).name] = state;
+      return {connections};
+    });
+  }
+
+  public render(): React.ReactNode {
+    const elems: React.ReactNode[] = [];
+    for (const name of Object.keys(this.state.connections)) {
+      const state = this.state.connections[name];
+      if (state === ConnectionState.FAILED) {
+        elems.push(
+          <Text key={name} style={[styles.state, styles.failed]}>
+            Could not reach {name}
+          </Text>
+        );
+      } else if (state === ConnectionState.CONNECTING) {
+        elems.push(
+          <Text key={name} style={styles.state}>Connecting to {name}...</Text>
+        );
+      }
+    }
     return (
       <View>
+        {elems}
         {this.renderProgress()}
       </View>
     );
   }
 
-  renderProgress(): React.ReactNode | null {
+  private renderProgress(): React.ReactNode | null {
     if (this.state.inflight == 0) {
       return null;
     }
@@ -101,14 +154,14 @@ export class NetworkStatus extends React.Component<NetworkStatusProps, NetworkSt
 function fetchWrapperStream(endpoint: string, req: RequestInit): Promise<Response> {
   req.headers = new Headers(req.headers);
   const p = fetchStream(endpoint, req);
-  NetworkStatus.track(p);
+  NetworkStatus.track(endpoint, p);
   return p;
 }
 
 function fetchWrapper(endpoint: string, req: RequestInit): Promise<Response> {
   req.headers = new Headers(req.headers);
   const p = fetch(endpoint, req);
-  NetworkStatus.track(p);
+  NetworkStatus.track(endpoint, p);
   return p;
 }
 
@@ -146,3 +199,15 @@ export async function stream<K>(endpoint: string): Promise<ReadableStreamDefault
   });
   return ndjsonStream<K>(resp.body).getReader();
 }
+
+const styles = StyleSheet.create({
+  state: {
+    padding: 5,
+    textAlign: 'center',
+    color: '#aaa',
+  },
+  failed: {
+    backgroundColor: 'red',
+    color: 'white',
+  },
+});
