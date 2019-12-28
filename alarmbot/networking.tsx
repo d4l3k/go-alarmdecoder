@@ -12,6 +12,19 @@ interface Home {
   thermostat: boolean;
 };
 
+export async function retry<T>(f: () => Promise<T>, tries: number = 3): Promise<T> {
+  for (let i=0;i<tries;i++) {
+    try {
+      return await f();
+    } catch (err) {
+      console.warn("try failed", i, f, err);
+      if (i === (tries-1)) {
+        throw err;
+      }
+    }
+  }
+}
+
 export const HOMES: Home[] = [
   {
     name: 'Seattle',

@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, Dimensions, StatusBar, ScrollView } from 'react-native';
 import { Notifications } from 'expo';
 import { EventSubscription } from 'fbemitter';
-import {HOMES, Home, stream} from './networking';
+import {HOMES, Home, stream, retry} from './networking';
 import debounce from 'lodash.debounce';
 import moment from 'moment';
 
@@ -49,19 +49,19 @@ export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
   }
 
   componentDidMount(): void {
-    this.updateEvents();
-
-    this.listener = Notifications.addListener(() => {
+    retry(async () => {
       this.updateEvents();
-    })
+    });
   }
 
   componentWillUnmount(): void {
-    this.listener.remove();
   }
 
   private async updateEvents(): Promise<void> {
     const es = await stream<Event>(this.props.home.endpoint + "/alarm");
+    this.setState(() => {
+      return {events: []};
+    });
     let pending: Event[] = [];
     const update = debounce(() => {
       this.setState(({events}) => {
@@ -73,7 +73,7 @@ export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
     while (true) {
       const result = await es.read();
       if (result.done) {
-        return;
+        throw new Error("stream ended");
       }
       pending.unshift(result.value);
       update();
@@ -82,27 +82,41 @@ export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
 
   render(): React.ReactNode {
     const {events} = this.state;
+
+    const elems: React.ReactNode[] = [];
+    let lastEventTime;
+    for (const e of events) {
+      const time = this.eventTime(e);
+      if (time !== lastEventTime) {
+        elems.push(<Text key={time} style={styles.time}>{time}</Text>);
+        lastEventTime = time;
+      }
+      elems.push(this.renderEvent(e));
+    }
+
     return (
       <ScrollView>
         <View style={styles.container}>
+          {elems}
           <Text>Event count={events.length}</Text>
-          {events.map((e) => this.renderEvent(e))}
         </View>
       </ScrollView>
     );
   }
 
-  renderEvent(e: Event): React.ReactNode {
-    let time = moment(e.Time);
-    const now = moment();
-    if (time.isAfter(now)) {
-      time = now;
-    }
+  private eventTime(e: Event): string {
+    return moment(e.Time).format("dddd, MMMM Do YYYY, h:mm a");
+  }
+
+  private renderEvent(e: Event): React.ReactNode {
     return (
-      <View key={e.Time} style={styles.event}>
-        <Text>{time.fromNow()}</Text>
-        <Text>{e.KeypadMessage}</Text>
-      </View>
+      <Text key={e.Time} style={[
+        styles.event,
+        e.Fire ? styles.fire : null,
+        e.AlarmSounding ? styles.alarm : null,
+      ]}>
+        {e.KeypadMessage}
+      </Text>
     )
   }
 }
@@ -115,12 +129,27 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     justifyContent: 'flex-start',
   },
-
+  alarm: {
+    backgroundColor: '#f00',
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  fire: {
+    backgroundColor: '#ffa500',
+    fontWeight: 'bold',
+    color: '#fff',
+  },
   event: {
     marginTop: 5,
     marginBottom: 5,
     padding: 10,
     backgroundColor: "#eee",
     borderRadius: 16,
+  },
+  time: {
+    textAlign: 'center',
+    marginRight: 10,
+    marginLeft: 10,
+    color: '#aaa',
   }
 })
