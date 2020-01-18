@@ -345,13 +345,19 @@ func (b *ADBot) Run() error {
 
 	b.push = expo.NewPushClient(nil)
 
-	mux := http.NewServeMux()
-	mux.Handle("/register", jsonHandler(b.registerHandler))
-	mux.Handle("/alarm", http.HandlerFunc(b.alarmHandler))
-	mux.Handle("/thermostat", jsonHandler(b.thermostatHandler))
+	secure := http.NewServeMux()
+	secure.Handle("/register", jsonHandler(b.registerHandler))
+	secure.Handle("/alarm", http.HandlerFunc(b.alarmHandler))
+	secure.Handle("/thermostat", jsonHandler(b.thermostatHandler))
 
-	handler := enforceAuth(mux, *secretKey)
-	handler = handlers.LoggingHandler(os.Stderr, handler)
+	insecure := http.NewServeMux()
+	insecure.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+		w.WriteHeader(200)
+	})
+	insecure.Handle("/", enforceAuth(secure, *secretKey))
+
+	handler := handlers.LoggingHandler(os.Stderr, insecure)
 
 	if len(*domain) == 0 {
 		hostname, err := os.Hostname()
@@ -367,9 +373,8 @@ func (b *ADBot) Run() error {
 
 		if *mock {
 			return http.ListenAndServe(*bind, handler)
-		} else {
-			return simplecert.ListenAndServeTLS(*bind, handler, *email, cancel, *domain)
 		}
+		return simplecert.ListenAndServeTLS(*bind, handler, *email, cancel, *domain)
 	})
 
 	var lastMsg string
