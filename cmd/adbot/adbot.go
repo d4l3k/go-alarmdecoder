@@ -28,7 +28,7 @@ var (
 	bind      = flag.String("bind", ":443", "address for webserver to listen on")
 	mock      = flag.Bool("mock", false, "whether to mock out the alarm decoder device")
 	email     = flag.String("email", "rice@fn.lc", "email address associated with cert")
-	domain    = flag.String("domain", "ariel.fn.lc", "domain to get a SSL cert for")
+	domain    = flag.String("domain", "", "domain to get a SSL cert for - defaults to hostname")
 	name      = flag.String("name", "", "name of the house")
 	port      = flag.String("port", "/dev/ttyAMA0", "serial port")
 	baudRate  = flag.Uint("baud", 115200, "baud rate of the serial port")
@@ -352,6 +352,14 @@ func (b *ADBot) Run() error {
 
 	handler := enforceAuth(mux, *secretKey)
 	handler = handlers.LoggingHandler(os.Stderr, handler)
+
+	if len(*domain) == 0 {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+		*domain = hostname
+	}
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
