@@ -5,29 +5,9 @@ import fetchStream from 'fetch-readablestream';
 // <reference path="ndjson.d.ts" />
 import ndjsonStream from 'can-ndjson-stream';
 
-interface Home {
-  name: string;
-  endpoint: string;
-  alarm: boolean;
-  thermostat: boolean;
-};
+import {Home} from './home';
+import {TOKEN, HOMES} from './config';
 
-export const HOMES: Home[] = [
-  {
-    name: 'Seattle',
-    endpoint: 'http://192.168.0.18:8080',
-    alarm: true,
-    thermostat: false,
-  },
-  {
-    name: 'Chalet',
-    endpoint: 'http://192.168.1.73:8080',
-    alarm: true,
-    thermostat: true,
-  },
-];
-
-const TOKEN = 'foo';
 const Authorization = {
   'Authorization': 'Bearer '+TOKEN,
 };

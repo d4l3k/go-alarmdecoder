@@ -1,7 +1,8 @@
 import {Notifications} from 'expo';
 import * as Permissions from 'expo-permissions';
 import Constants from 'expo-constants';
-import {HOMES, post} from './networking';
+import {HOMES} from './config';
+import {post} from './networking';
 
 const PUSH_ENDPOINT = '/register';
 

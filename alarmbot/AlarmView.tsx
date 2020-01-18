@@ -2,7 +2,9 @@ import React from 'react';
 import { StyleSheet, Text, View, Dimensions, StatusBar, ScrollView } from 'react-native';
 import { Notifications } from 'expo';
 import { EventSubscription } from 'fbemitter';
-import {HOMES, Home, stream, retry} from './networking';
+import {stream, retry} from './networking';
+import {HOMES} from './config';
+import {Home} from './home';
 import debounce from 'lodash.debounce';
 import moment from 'moment';
 
@@ -98,7 +100,7 @@ export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
       <ScrollView>
         <View style={styles.container}>
           {elems}
-          <Text>Event count={events.length}</Text>
+          <Text style={styles.time}>Event count = {events.length}</Text>
         </View>
       </ScrollView>
     );

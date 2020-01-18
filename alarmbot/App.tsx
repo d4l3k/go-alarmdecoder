@@ -4,7 +4,9 @@ import { registerForPushNotificationsAsync } from './notifications';
 import { TabView, SceneMap, Route } from 'react-native-tab-view';
 import {TemperatureView} from './TemperatureView';
 import {AlarmView} from './AlarmView';
-import {NetworkStatus, HOMES, Home} from './networking';
+import {Home} from './home';
+import {HOMES} from './config';
+import {NetworkStatus, } from './networking';
 
 import { ReadableStream } from "web-streams-polyfill/ponyfill";
 global.ReadableStream = global.ReadableStream || ReadableStream;
