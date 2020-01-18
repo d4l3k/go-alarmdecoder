@@ -2,7 +2,7 @@
   "expo": {
     "name": "alarmbot",
     "slug": "alarmbot",
-    "privacy": "public",
+    "privacy": "unlisted",
     "sdkVersion": "36.0.0",
     "platforms": [
       "ios",
@@ -27,6 +27,8 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "lc.fn.alarmbot",
+      "versionCode": 1,
       "googleServicesFile": "./google-services.json"
     }
   }
