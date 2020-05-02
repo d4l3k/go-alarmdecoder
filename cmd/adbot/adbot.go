@@ -49,6 +49,26 @@ var (
 		Name: "event_total",
 		Help: "The total number of events",
 	})
+	fire = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "fire",
+		Help: "whether shit is on fire",
+	})
+	alarmSounding = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "alarm_sounding",
+		Help: "whether the alarm is sounding",
+	})
+	ready = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ready",
+		Help: "whether the alarm is ready",
+	})
+	armedAway = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "armed_away",
+		Help: "whether the alarm is armed away",
+	})
+	armedHome = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "armed_home",
+		Help: "whether the alarm is armed home",
+	})
 )
 
 const (
@@ -456,8 +476,20 @@ func (b *ADBot) Run() error {
 	return eg.Wait()
 }
 
+func btof(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func (b *ADBot) addEvent(e Event) {
 	eventTotal.Inc()
+	fire.Set(btof(e.Fire))
+	alarmSounding.Set(btof(e.AlarmSounding))
+	ready.Set(btof(e.Ready))
+	armedAway.Set(btof(e.ArmedAway))
+	armedHome.Set(btof(e.ArmedHome))
 
 	b.mu.Lock()
 	defer b.mu.Unlock()
