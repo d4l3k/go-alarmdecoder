@@ -16,11 +16,15 @@ import (
 	"time"
 
 	alarmdecoder "github.com/d4l3k/go-alarmdecoder"
+
 	"github.com/foomo/simplecert"
 	"github.com/gorilla/handlers"
 	"github.com/jacobsa/go-serial/serial"
 	expo "github.com/oliveroneill/exponent-server-sdk-golang/sdk"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -34,6 +38,17 @@ var (
 	baudRate  = flag.Uint("baud", 115200, "baud rate of the serial port")
 	secretKey = flag.String("secret", "", "shared secret with clients")
 	saveFile  = flag.String("savefile", "adbot.json", "file to save state in")
+)
+
+var (
+	pushNotificationsSent = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "push_notifications_sent_total",
+		Help: "The total number sent push notifications",
+	})
+	eventTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "event_total",
+		Help: "The total number of events",
+	})
 )
 
 const (
@@ -176,6 +191,7 @@ func (b *ADBot) sendPushNotifications(ctx context.Context, e Event) error {
 			Sound:      "default",
 			ChannelID:  channelID,
 		})
+		pushNotificationsSent.Inc()
 	}
 
 	if len(messages) == 0 {
@@ -355,6 +371,7 @@ func (b *ADBot) Run() error {
 		w.Write([]byte("ok"))
 		w.WriteHeader(200)
 	})
+	insecure.Handle("/metrics", promhttp.Handler())
 	insecure.Handle("/", enforceAuth(secure, *secretKey))
 
 	handler := handlers.LoggingHandler(os.Stderr, insecure)
@@ -440,6 +457,8 @@ func (b *ADBot) Run() error {
 }
 
 func (b *ADBot) addEvent(e Event) {
+	eventTotal.Inc()
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

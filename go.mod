@@ -12,11 +12,11 @@ require (
 	github.com/mileusna/facebook-messenger v0.0.0-20170622184612-613a2157fa62
 	github.com/oliveroneill/exponent-server-sdk-golang v0.0.0-20190619221248-65582a10ed02
 	github.com/pkg/errors v0.8.1
+	github.com/prometheus/client_golang v1.6.0
 	go.opencensus.io v0.22.2 // indirect
 	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553 // indirect
 	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6 // indirect
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	golang.org/x/sys v0.0.0-20191220220014-0732a990476f // indirect
 	google.golang.org/api v0.15.0
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/genproto v0.0.0-20191220175831-5c49e3ecc1c1 // indirect
