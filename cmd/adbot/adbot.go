@@ -342,6 +342,11 @@ func (b *ADBot) alarmHandler(w http.ResponseWriter, r *http.Request) {
 		delete(b.mu.listeners, id)
 	}()
 
+	const maxSend = 1000
+	if len(events) > maxSend {
+		events = events[len(events)-maxSend:]
+	}
+
 	for _, event := range events {
 		if err := writeEventNDJSON(w, event); err != nil {
 			http.Error(w, err.Error(), 500)
