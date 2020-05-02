@@ -385,13 +385,13 @@ func (b *ADBot) Run() error {
 	secure.Handle("/register", jsonHandler(b.registerHandler))
 	secure.Handle("/alarm", http.HandlerFunc(b.alarmHandler))
 	secure.Handle("/thermostat", jsonHandler(b.thermostatHandler))
+	secure.Handle("/metrics", promhttp.Handler())
 
 	insecure := http.NewServeMux()
 	insecure.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 		w.WriteHeader(200)
 	})
-	insecure.Handle("/metrics", promhttp.Handler())
 	insecure.Handle("/", enforceAuth(secure, *secretKey))
 
 	handler := handlers.LoggingHandler(os.Stderr, insecure)
