@@ -377,7 +377,7 @@ func (b *ADBot) Run() error {
 	defer cancel()
 
 	if err := b.mu.state.load(*saveFile); err != nil {
-		return nil
+		return err
 	}
 
 	if len(*name) == 0 {
