@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go v0.50.0 // indirect
 	github.com/appleboy/go-fcm v0.1.5-0.20191214235500-369ac9220ebd
 	github.com/foomo/simplecert v1.6.2
+	github.com/foomo/tlsconfig v0.0.0-20180418120404-b67861b076c9
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/gorilla/handlers v1.4.2
 	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4

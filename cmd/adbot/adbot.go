@@ -18,6 +18,7 @@ import (
 	alarmdecoder "github.com/d4l3k/go-alarmdecoder"
 
 	"github.com/foomo/simplecert"
+	"github.com/foomo/tlsconfig"
 	"github.com/gorilla/handlers"
 	"github.com/jacobsa/go-serial/serial"
 	expo "github.com/oliveroneill/exponent-server-sdk-golang/sdk"
@@ -29,7 +30,8 @@ import (
 )
 
 var (
-	bind      = flag.String("bind", ":443", "address for webserver to listen on")
+	bind      = flag.String("httpsbind", ":443", "address for webserver to listen on HTTPS")
+	httpBind  = flag.String("httpbind", ":80", "address for webserver to listen on HTTP")
 	mock      = flag.Bool("mock", false, "whether to mock out the alarm decoder device")
 	email     = flag.String("email", "rice@fn.lc", "email address associated with cert")
 	domain    = flag.String("domain", "", "domain to get a SSL cert for - defaults to hostname")
@@ -112,7 +114,11 @@ func (s *state) load(path string) error {
 	}
 	defer f.Close()
 
-	return json.NewDecoder(f).Decode(s)
+	if err := json.NewDecoder(f).Decode(s); err != nil {
+		log.Printf("failed to load data, using clean state: %+v", err)
+		*s = state{}
+	}
+	return nil
 }
 
 func (s *state) save(path string) error {
@@ -410,13 +416,21 @@ func (b *ADBot) Run() error {
 	}
 
 	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		log.Printf("Listening on %s...", *bind)
+	if !*mock {
+		eg.Go(func() error {
+			log.Printf("Listening on %s...", *bind)
+			tlsconf := tlsconfig.NewServerTLSConfig(tlsconfig.TLSModeServerStrict)
+			cfg := simplecert.Default
+			cfg.Domains = []string{*domain}
+			cfg.CacheDir = "simplecert"
+			cfg.SSLEmail = *email
+			return simplecert.ListenAndServeTLSCustom(*bind, handler, cfg, tlsconf, cancel)
+		})
+	}
 
-		if *mock {
-			return http.ListenAndServe(*bind, handler)
-		}
-		return simplecert.ListenAndServeTLS(*bind, handler, *email, cancel, *domain)
+	eg.Go(func() error {
+		log.Printf("Listening on %s...", *httpBind)
+		return http.ListenAndServe(*httpBind, handler)
 	})
 
 	var lastMsg string
