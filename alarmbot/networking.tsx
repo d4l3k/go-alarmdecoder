@@ -12,10 +12,32 @@ const Authorization = {
   'Authorization': 'Bearer '+TOKEN,
 };
 
+const defaultTimeout = 10000;
+
+function timeoutPromise<T>(ms: number, promise: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error("promise timeout"))
+    }, ms);
+    promise.then(
+      (res) => {
+        clearTimeout(timeoutId);
+        resolve(res);
+      },
+      (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      }
+    );
+  })
+}
+
 export function homeFromURL(endpoint: string): Home {
   for (const home of HOMES) {
-    if (endpoint.startsWith(home.endpoint)) {
-      return home
+    for (const homeendpoint of home.endpoints) {
+      if (endpoint.startsWith(homeendpoint)) {
+        return home
+      }
     }
   }
   return null;
@@ -25,11 +47,11 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function retry<T>(f: () => Promise<T>, tries: number = 10): Promise<T> {
+export async function retry<T>(f: (i: number) => Promise<T>, tries: number = 10): Promise<T> {
   let sleepMs = 1000;
   for (let i=0;i<tries;i++) {
     try {
-      return await f();
+      return await f(i);
     } catch (err) {
       console.warn("try failed", i, f, err);
       if (i === (tries-1)) {
@@ -92,7 +114,11 @@ export class NetworkStatus extends React.Component<NetworkStatusProps, NetworkSt
 
   private setConnState(endpoint: string, state: ConnectionState): void {
     this.setState(({connections}) => {
-      connections[homeFromURL(endpoint).name] = state;
+      const home = homeFromURL(endpoint);
+      if (!home) {
+        throw Error("couldn't find home for "+endpoint);
+      }
+      connections[home.name] = state;
       return {connections};
     });
   }
@@ -133,19 +159,20 @@ export class NetworkStatus extends React.Component<NetworkStatusProps, NetworkSt
 
 function fetchWrapperStream(endpoint: string, req: RequestInit): Promise<Response> {
   req.headers = new Headers(req.headers);
-  const p = fetchStream(endpoint, req);
+  const p = timeoutPromise(defaultTimeout, fetchStream(endpoint, req));
   NetworkStatus.track(endpoint, p);
   return p;
 }
 
 function fetchWrapper(endpoint: string, req: RequestInit): Promise<Response> {
   req.headers = new Headers(req.headers);
-  const p = fetch(endpoint, req);
+  const p = timeoutPromise(defaultTimeout, fetch(endpoint, req));
   NetworkStatus.track(endpoint, p);
   return p;
 }
 
 export async function post<T, K>(endpoint: string, body: T): Promise<K> {
+  console.log('fetching from ', endpoint);
   const resp = await fetchWrapper(endpoint, {
     method: 'POST',
     headers: {
@@ -170,6 +197,7 @@ export async function get<K>(endpoint: string): Promise<K> {
 }
 
 export async function stream<K>(endpoint: string): Promise<ReadableStreamDefaultReader<K>> {
+  console.log('streaming from ', endpoint);
   const resp = await fetchWrapperStream(endpoint, {
     method: 'GET',
     headers: {

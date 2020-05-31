@@ -51,16 +51,18 @@ export class AlarmView extends React.Component<AlarmViewProps, AlarmViewState> {
   }
 
   componentDidMount(): void {
-    retry(async () => {
-      await this.updateEvents();
+    retry(async (i: number) => {
+      await this.updateEvents(i);
     });
   }
 
   componentWillUnmount(): void {
   }
 
-  private async updateEvents(): Promise<void> {
-    const es = await stream<Event>(this.props.home.endpoint + "/alarm");
+  private async updateEvents(i: number): Promise<void> {
+    const idx = i % this.props.home.endpoints.length;
+    const endpoint = this.props.home.endpoints[idx];
+    const es = await stream<Event>(endpoint + "/alarm");
     this.setState(() => {
       return {events: []};
     });

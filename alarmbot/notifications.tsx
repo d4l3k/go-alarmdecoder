@@ -2,7 +2,7 @@ import {Notifications} from 'expo';
 import * as Permissions from 'expo-permissions';
 import Constants from 'expo-constants';
 import {HOMES} from './config';
-import {post} from './networking';
+import {retry, post} from './networking';
 
 const PUSH_ENDPOINT = '/register';
 
@@ -38,12 +38,14 @@ export async function registerForPushNotificationsAsync(): Promise<void> {
   let token = await Notifications.getExpoPushTokenAsync();
 
   for (const home of HOMES) {
-    const endpoint = home.endpoint + PUSH_ENDPOINT;
-    post(endpoint, {
-      Token: token,
-      InstallationID: Constants.installationId,
-      DeviceName: Constants.deviceId,
-      NativeAppVersion: Constants.nativeAppVersion,
-    });
+    retry(async (i: number) => {
+      const endpoint = home.endpoints[i % home.endpoints.length] + PUSH_ENDPOINT;
+      await post(endpoint, {
+        Token: token,
+        InstallationID: Constants.installationId,
+        DeviceName: Constants.deviceId,
+        NativeAppVersion: Constants.nativeAppVersion,
+      });
+    })
   }
 }

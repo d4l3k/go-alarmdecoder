@@ -1,6 +1,6 @@
 export interface Home {
   name: string;
-  endpoint: string;
+  endpoints: string[];
   alarm: boolean;
   thermostat: boolean;
 };
