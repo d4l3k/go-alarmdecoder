@@ -10,8 +10,8 @@ require (
 	github.com/gorilla/handlers v1.4.2
 	github.com/jacobsa/go-serial v0.0.0-20180131005756-15cf729a72d4
 	github.com/oliveroneill/exponent-server-sdk-golang v0.0.0-20190619221248-65582a10ed02
-	github.com/pkg/errors v0.8.1
-	github.com/prometheus/client_golang v1.6.0
+	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.11.1
 	go.opencensus.io v0.22.2 // indirect
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6 // indirect
